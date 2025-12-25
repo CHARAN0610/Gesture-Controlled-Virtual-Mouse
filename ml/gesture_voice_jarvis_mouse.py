@@ -13,17 +13,18 @@ from collections import deque
 pyautogui.FAILSAFE = False
 screen_w, screen_h = pyautogui.size()
 
-# ================= GLOBAL STATES =================
 running = True
 gesture_enabled = True
+listening_enabled = True
 wake_word = "alpha"
 
-chat = deque(maxlen=8)
+# Chat buffer
+chat = deque(maxlen=10)
 
 def add_msg(sender, text):
     chat.append(f"{sender}: {text}")
 
-add_msg("SYSTEM", "Say 'alpha' + command")
+add_msg("SYSTEM", "Say 'alpha' + command (say 'alpha help')")
 
 # ================= VOICE SETUP =================
 recognizer = sr.Recognizer()
@@ -33,9 +34,13 @@ def beep():
     winsound.Beep(900, 150)
 
 def voice_listener():
-    global running, gesture_enabled
+    global running, gesture_enabled, listening_enabled
 
     while running:
+        if not listening_enabled:
+            time.sleep(0.5)
+            continue
+
         try:
             add_msg("SYSTEM", "Listening...")
             with microphone as source:
@@ -47,58 +52,86 @@ def voice_listener():
             command = recognizer.recognize_google(audio).lower()
             add_msg("YOU", command)
 
-            # ---------------- WAKE WORD ----------------
             if wake_word not in command:
                 add_msg("SYSTEM", "Wake word missing (say 'alpha')")
                 continue
 
             # remove wake word
             command = command.replace(wake_word, "").strip()
+            time.sleep(0.3)
 
-            time.sleep(0.4)
+            # ================= COMMAND EXECUTION =================
 
-            # ---------------- COMMAND EXECUTION ----------------
-            if "open" in command and "github" in command:
+            if "help" in command:
+                add_msg("SYSTEM", "Available commands:")
+                add_msg("SYSTEM", "open github | youtube | gmail | linkedin | netflix | whatsapp")
+                add_msg("SYSTEM", "open settings | visual studio code | calculator | notepad")
+                add_msg("SYSTEM", "open file explorer | show desktop")
+                add_msg("SYSTEM", "search <topic> | pause listening | resume listening | exit")
+
+            elif "pause" in command and "listening" in command:
+                listening_enabled = False
+                add_msg("SYSTEM", "Listening paused")
+
+            elif "resume" in command and "listening" in command:
+                listening_enabled = True
+                add_msg("SYSTEM", "Listening resumed")
+
+            elif "open" in command and "github" in command:
                 add_msg("SYSTEM", "Opening GitHub")
                 webbrowser.open("https://github.com")
-                add_msg("SYSTEM", "GitHub opened")
 
-            elif "open" in command and "tradingview" in command:
-                add_msg("SYSTEM", "Opening TradingView")
-                webbrowser.open("https://www.tradingview.com")
-                add_msg("SYSTEM", "TradingView opened")
+            elif "open" in command and "youtube" in command:
+                add_msg("SYSTEM", "Opening YouTube")
+                webbrowser.open("https://www.youtube.com")
 
-            elif "open" in command and "chrome" in command:
-                add_msg("SYSTEM", "Opening Chrome")
-                webbrowser.open("https://www.google.com")
-                add_msg("SYSTEM", "Chrome opened")
+            elif "open" in command and "gmail" in command:
+                add_msg("SYSTEM", "Opening Gmail")
+                webbrowser.open("https://mail.google.com")
+
+            elif "open" in command and "linkedin" in command:
+                add_msg("SYSTEM", "Opening LinkedIn")
+                webbrowser.open("https://www.linkedin.com")
+
+            elif "open" in command and "netflix" in command:
+                add_msg("SYSTEM", "Opening Netflix")
+                webbrowser.open("https://www.netflix.com")
+
+            elif "open" in command and "whatsapp" in command:
+                add_msg("SYSTEM", "Opening WhatsApp Web")
+                webbrowser.open("https://web.whatsapp.com")
 
             elif "open" in command and "settings" in command:
                 add_msg("SYSTEM", "Opening Settings")
                 os.system("start ms-settings:")
-                add_msg("SYSTEM", "Settings opened")
 
             elif ("open" in command and "visual" in command) or ("open" in command and "code" in command):
                 add_msg("SYSTEM", "Opening Visual Studio Code")
                 os.system("code")
-                add_msg("SYSTEM", "VS Code opened")
+
+            elif "open" in command and "calculator" in command:
+                add_msg("SYSTEM", "Opening Calculator")
+                os.system("calc")
+
+            elif "open" in command and "notepad" in command:
+                add_msg("SYSTEM", "Opening Notepad")
+                os.system("notepad")
+
+            elif "open" in command and "file" in command:
+                add_msg("SYSTEM", "Opening File Explorer")
+                os.system("explorer")
+
+            elif "show" in command and "desktop" in command:
+                add_msg("SYSTEM", "Showing Desktop")
+                pyautogui.hotkey("win", "d")
 
             elif "search" in command:
                 query = command.replace("search", "").strip()
                 if query:
                     add_msg("SYSTEM", f"Searching {query}")
                     webbrowser.open(f"https://www.google.com/search?q={query}")
-                    add_msg("SYSTEM", "Search completed")
                 else:
                     add_msg("SYSTEM", "Search keyword missing")
-
-            elif "start" in command and "control" in command:
-                gesture_enabled = True
-                add_msg("SYSTEM", "Gesture control enabled")
-
-            elif "stop" in command and "control" in command:
-                gesture_enabled = False
-                add_msg("SYSTEM", "Gesture control disabled")
 
             elif "exit" in command:
                 add_msg("SYSTEM", "Exiting system")
@@ -115,7 +148,7 @@ def voice_listener():
         except sr.UnknownValueError:
             add_msg("SYSTEM", "Could not understand")
 
-        except Exception as e:
+        except Exception:
             add_msg("SYSTEM", "Mic error")
 
 # ================= START VOICE THREAD =================
@@ -127,7 +160,7 @@ hands = mp_hands.Hands(max_num_hands=1)
 mp_draw = mp.solutions.drawing_utils
 cap = cv2.VideoCapture(0)
 
-# ================= CURSOR CONTROL =================
+# Cursor control
 cursor_x, cursor_y = screen_w // 2, screen_h // 2
 MOVE_ALPHA = 0.05
 DEADZONE = 40
@@ -175,8 +208,8 @@ while running:
                 pyautogui.mouseUp()
                 dragging = False
 
-    # ================= CHAT BOX =================
-    cv2.rectangle(frame, (0, 0), (760, 240), (0, 0, 0), -1)
+    # ================= CHAT UI =================
+    cv2.rectangle(frame, (0, 0), (900, 300), (0, 0, 0), -1)
     y = 25
     for msg in chat:
         color = (0, 255, 0) if msg.startswith("SYSTEM") else (255, 255, 255)
